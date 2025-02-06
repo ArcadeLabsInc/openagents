@@ -2,7 +2,7 @@ use crate::solver_impl::{changes_analysis::analyze_changes_with_deepseek, types:
 use anyhow::Result;
 use openagents::server::services::deepseek::DeepSeekService;
 use openagents::server::services::ollama::OllamaService;
-use openagents::solver::state::{SolverState, SolverStatus};
+use openagents::solver::state::{Change, SolverState, SolverStatus};
 use std::path::Path;
 use tracing::{debug, error, info};
 
@@ -22,9 +22,9 @@ pub async fn generate_changes(
     debug!("DeepSeek reasoning: {}", reasoning);
 
     // Now process each file with Mistral using DeepSeek's analysis
-    for file in &mut state.files {
+    for file_state in &mut state.files {
         // Log paths BEFORE any operations
-        let relative_path = &file.path;
+        let relative_path = &file_state.path;
         let absolute_path = Path::new(repo_dir).join(relative_path);
         info!("Processing file:");
         info!("  Relative path: {}", relative_path);
@@ -64,7 +64,7 @@ pub async fn generate_changes(
             Return a JSON object with a 'changes' array containing objects with 'search', 'replace', and 'analysis' fields.", 
             response,
             reasoning,
-            file.path,
+            file_state.path,
             file_content
         );
 
@@ -109,7 +109,7 @@ pub async fn generate_changes(
                 }
                 1 => {
                     debug!("Found unique match for search string");
-                    file.add_change(change.search, change.replace, change.analysis);
+                    file_state.add_change(change.search, change.replace, change.analysis);
                 }
                 n => {
                     error!(
