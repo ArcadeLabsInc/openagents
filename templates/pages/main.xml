@@ -90,33 +90,49 @@
         width="100%"
         alignItems="center"
         marginBottom="24" />
+
+      <style id="drawerContent"
+        backgroundColor="#000"
+        flex="1"
+        width="100%"
+        padding="24" />
     </styles>
 
-    <body style="body">
-      <view style="device">
-        <!-- Top Section -->
-        <view style="menuContainerTop">
-          <local:svg src="arrow-right" width="20" height="20" />
-        </view>
-
-        <!-- Middle Section -->
-        <view style="conversationContainer">
-          <view>
-            <local:image src="loading" style="logo" />
-          </view>
-        </view>
-
-        <!-- Bottom Section -->
-        <view style="inputBox">
-          <view style="voiceContainer">
-            <local:svg src="voice" width="26" height="26" color="#515151" />
-            <text style="askAnything">Ask anything</text>
-          </view>
-          <view style="sendContainer">
-            <local:svg src="send" width="19" height="19" color="#515151" />
-          </view>
-        </view>
+    <local:drawer>
+      <view slot="drawer-content" style="drawerContent">
+        <!-- Drawer content here -->
+        <text style="whiteText">Drawer Content</text>
       </view>
-    </body>
+
+      <view slot="main-content">
+        <body style="body">
+          <view style="device">
+            <!-- Top Section -->
+            <view style="menuContainerTop">
+              <behavior trigger="press" action="set-drawer-state" state="open" />
+              <local:svg src="arrow-right" width="20" height="20" />
+            </view>
+
+            <!-- Middle Section -->
+            <view style="conversationContainer">
+              <view>
+                <local:image src="loading" style="logo" />
+              </view>
+            </view>
+
+            <!-- Bottom Section -->
+            <view style="inputBox">
+              <view style="voiceContainer">
+                <local:svg src="voice" width="26" height="26" color="#515151" />
+                <text style="askAnything">Ask anything</text>
+              </view>
+              <view style="sendContainer">
+                <local:svg src="send" width="19" height="19" color="#515151" />
+              </view>
+            </view>
+          </view>
+        </body>
+      </view>
+    </local:drawer>
   </screen>
 </doc>
