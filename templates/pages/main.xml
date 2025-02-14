@@ -109,7 +109,7 @@
           <view style="device">
             <!-- Top Section -->
             <view style="menuContainerTop">
-              <behavior trigger="press" action="set-drawer-state" state="open" target="closest" />
+              <behavior trigger="press" action="toggle-drawer" />
               <local:svg src="arrow-right" width="20" height="20" />
             </view>
 
