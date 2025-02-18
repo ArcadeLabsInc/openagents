@@ -3,10 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "react-router build && rm -rf ../backend/client && cp -r build/client ../backend/client",
-    "dev": "react-router dev",
-    "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc"
+    "build": "vite build",
+    "dev": "vite",
+    "typecheck": "tsc"
   },
   "dependencies": {
     "@react-router/node": "^7.1.5",
