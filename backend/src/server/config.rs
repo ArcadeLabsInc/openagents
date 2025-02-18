@@ -18,7 +18,7 @@ use axum::{
 };
 use sqlx::PgPool;
 use std::{env, sync::Arc};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
 #[derive(Clone)]
@@ -150,37 +150,19 @@ pub fn configure_app_with_config(pool: PgPool, config: Option<AppConfig>) -> Rou
 
     // Create the main router
     Router::new()
-        // Main routes
-        .route("/", get(routes::home))
+        // API routes
         .route("/ws", get(server::ws::ws_handler))
-        .route("/onyx", get(routes::mobile_app))
-        .route("/services", get(routes::business))
-        .route("/video-series", get(routes::video_series))
-        .route("/company", get(routes::company))
-        .route("/coming-soon", get(routes::coming_soon))
         .route("/health", get(routes::health_check))
-        .route("/cota", get(routes::cota))
-        // Auth routes
-        .route("/login", get(routes::login))
-        .route("/signup", get(routes::signup))
         .route("/api/user", get(routes::get_user_info))
         // Merge auth router
         .merge(app_router(app_state.clone()))
-        // Static files
-        .nest_service("/assets", ServeDir::new("./assets").precompressed_gzip())
+        // Serve React Router app
         .nest_service(
-            "/templates",
-            ServeDir::new("./templates").precompressed_gzip(),
+            "/assets",
+            ServeDir::new("./client/assets").precompressed_gzip(),
         )
-        // Serve all Vite files from dist
-        .nest_service(
-            "/chat",
-            tower_http::services::fs::ServeFile::new("./chat/dist/index.html"),
-        )
-        .nest_service(
-            "/chat/assets",
-            ServeDir::new("./chat/dist/assets").precompressed_gzip(),
-        )
+        // Serve all other routes from React Router's server build
+        .fallback_service(ServeFile::new("./server/index.js"))
         // State
         .with_state(app_state)
 }
