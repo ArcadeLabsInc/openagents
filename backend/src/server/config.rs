@@ -16,9 +16,11 @@ use axum::{
     routing::get,
     Router,
 };
+use hyper::client::HttpConnector;
+use hyper_reverse_proxy::ReverseProxy;
 use sqlx::PgPool;
 use std::{env, sync::Arc};
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 use tracing::info;
 
 #[derive(Clone)]
@@ -27,6 +29,7 @@ pub struct AppState {
     pub github_oauth: Arc<GitHubOAuth>,
     pub scramble_oauth: Arc<ScrambleOAuth>,
     pub pool: PgPool,
+    pub proxy: Arc<ReverseProxy<HttpConnector>>,
 }
 
 #[derive(Clone)]
@@ -140,12 +143,17 @@ pub fn configure_app_with_config(pool: PgPool, config: Option<AppConfig>) -> Rou
             .expect("Failed to create Scramble OAuth service"),
     );
 
+    // Create reverse proxy
+    let client = hyper::Client::new();
+    let proxy = Arc::new(ReverseProxy::new(client));
+
     // Create shared app state
     let app_state = AppState {
         ws_state,
         github_oauth,
         scramble_oauth,
         pool: pool.clone(),
+        proxy,
     };
 
     // Create the main router
@@ -156,13 +164,17 @@ pub fn configure_app_with_config(pool: PgPool, config: Option<AppConfig>) -> Rou
         .route("/api/user", get(routes::get_user_info))
         // Merge auth router
         .merge(app_router(app_state.clone()))
-        // Serve React Router app
-        .nest_service(
-            "/assets",
-            ServeDir::new("./client/assets").precompressed_gzip(),
-        )
-        // Serve all other routes from React Router's server build
-        .fallback_service(ServeFile::new("./server/index.js"))
+        // Proxy all other requests to React Router server
+        .fallback(|req: Request<Body>, state: axum::extract::State<AppState>| async move {
+            let target_url = format!("http://localhost:3000{}", req.uri().path());
+            match state.proxy.call(req, &target_url).await {
+                Ok(response) => response,
+                Err(_) => axum::response::Response::builder()
+                    .status(502)
+                    .body(Body::from("Bad Gateway"))
+                    .unwrap(),
+            }
+        })
         // State
         .with_state(app_state)
 }
