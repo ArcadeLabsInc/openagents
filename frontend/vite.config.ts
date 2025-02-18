@@ -5,4 +5,21 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    manifest: true,
+    rollupOptions: {
+      input: "app/entry.client.tsx",
+    }
+  },
+  server: {
+    proxy: {
+      "/api": "http://localhost:8000",
+      "/ws": {
+        target: "ws://localhost:8000",
+        ws: true
+      }
+    }
+  }
 });
