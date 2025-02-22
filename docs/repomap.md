@@ -1,6 +1,3 @@
-backend/assets/main.css:
-│class directly
-
 backend/build.rs:
 │fn main
 
@@ -22,46 +19,12 @@ backend/src/bin/generate-repomap.rs:
 backend/src/bin/repo.rs:
 │fn main
 
-backend/src/bin/solver_impl/changes.rs:
-│fn generate_changes
-│fn apply_file_changes
-
-backend/src/bin/solver_impl/changes_analysis.rs:
-│fn analyze_changes_with_deepseek
-
-backend/src/bin/solver_impl/context.rs:
-│fn extract_paths_from_repomap
-│fn collect_context
-
-backend/src/bin/solver_impl/files.rs:
-│fn identify_files
-
-backend/src/bin/solver_impl/issue.rs:
-│fn handle_issue
-
-backend/src/bin/solver_impl/pre_analysis.rs:
-│fn analyze_with_deepseek
-
 backend/src/bin/transcribe.rs:
 │fn main
-
-backend/src/configuration.rs:
-│fn default
-│fn connect_options
-│fn default_admin_token
-│fn default_password
-│fn default_port
-│fn default_true
-│fn get_configuration
-│fn as_str
-│fn try_from
 
 backend/src/database.rs:
 │fn get_connection_pool
 │fn migrate_database
-
-backend/src/filters.rs:
-│fn render_markdown
 
 backend/src/main.rs:
 │fn main
@@ -86,11 +49,11 @@ backend/src/repo/types.rs:
 backend/src/repomap.rs:
 │#id: test
 │fn generate_repo_map
-│fn
+│fn 
 │fn extract_id
 │fn extract_function_name
-│fn
-│fn
+│fn 
+│fn 
 │fn extract_class_name
 │fn extract_const_name
 │fn init_logging
@@ -102,28 +65,19 @@ backend/src/repomap.rs:
 │fn test_extractors
 │fn test_func
 │class in
-│class
-│class
-│class
-│class
+│class 
+│class 
+│class 
+│class 
 │class TestClass
 │const DEFAULT_BLACKLIST
-│const
-│const
-│const
+│const 
+│const 
+│const 
 │const TEST_CONST
 
 backend/src/routes.rs:
 │fn health_check
-│fn home
-│fn login
-│fn signup
-│fn mobile_app
-│fn business
-│fn video_series
-│fn company
-│fn coming_soon
-│fn cota
 │fn get_user_info
 
 backend/src/server/config.rs:
@@ -415,19 +369,6 @@ backend/src/server/services/repomap/mod.rs:
 │fn generate_repository_map
 │fn cleanup
 
-backend/src/server/services/solver/mod.rs:
-│fn new
-│fn create_solver
-│fn get_solver
-│fn update_solver
-│fn start_generating_changes
-│fn approve_change
-│fn reject_change
-│fn check_all_changes_reviewed
-│fn analyze_issue
-│fn solve_demo_repo
-│fn solve_repo
-
 backend/src/server/services/solver/types.rs:
 │fn new
 │fn add_file
@@ -447,259 +388,25 @@ backend/src/server/ws/handlers/mod.rs:
 │fn handle_message
 │fn broadcast
 
-backend/src/server/ws/handlers/solver.rs:
-│fn new
-│fn handle_solver_event
-│fn handle_message
-│fn broadcast
-
-backend/src/server/ws/handlers/solver_json.rs:
-│fn new
-│fn handle_message
-│fn emit_state_update
-│fn emit_file_analysis
-│fn emit_change_generated
-│fn emit_change_applied
-│fn emit_error
-│fn handle_message
-│fn broadcast
-
 backend/src/server/ws/mod.rs:
 │fn ws_handler
-│fn handle_socket
 
 backend/src/server/ws/transport.rs:
 │fn new
-│fn create_handlers
-│fn validate_session
-│fn handle_socket
-│fn broadcast
 │fn send_to
-│fn get_user_id
+│fn broadcast
 │fn add_connection
 │fn remove_connection
-│fn add_test_connection
-│fn get_tx
-│fn clone
+│fn new
+│fn process_message
+│fn new
+│fn handle_socket
 
 backend/src/server/ws/types.rs:
 │fn fmt
 
 backend/tailwind.config.cjs:
-│const
-
-backend/templates/admin/dashboard.html:
-│#id: bg
-│#id: solver-progress
-│#id: solver-status
-│#id: solver-result
-
-backend/templates/admin/login.html:
-│#id: bg
-│#id: error-message
-
-backend/templates/components/auth/auth_scripts.html:
-│const errorDiv
-│const errorMessage
-│const errorDiv
-│const errorMessages
-│const message
-
-backend/templates/components/auth/error.html:
-│#id: auth-error
-│#id: auth-error-message
-
-backend/templates/components/auth/error_handler.js:
-│const errorDiv
-│const errorMessage
-│const errorDiv
-│const errorMessages
-│const message
-
-backend/templates/components/chat/error_section.html:
-│#id: error-section
-│#id: error-message
-
-backend/templates/components/chat/head_scripts.html:
-│const newTitle
-
-backend/templates/components/chat/login_overlay.html:
-│#id: login-overlay
-
-backend/templates/components/chat/main_chat.html:
-│#id: chat-messages
-│#id: input
-│#id: submit-button
-│const textarea
-│const form
-│const newHeight
-
-backend/templates/components/chat/templates.html:
-│#id: message-template
-│#id: ai-icon-template
-│#id: user-icon-template
-
-backend/templates/components/chat/websocket_scripts.html:
-│class if
-│const button
-│const codeBlock
-│const originalHTML
-│const errorSection
-│const form
-│const formData
-│const content
-│const message
-│const data
-│const button
-│const tempDiv
-│const codeBlocks
-│const pre
-│const wrapper
-│const langClass
-│const lang
-│const copyButton
-│const messagesDiv
-│const template
-│const aiIconTemplate
-│const userIconTemplate
-│const messageEl
-│const contentEl
-│const statusEl
-│const avatarContainer
-│const messageEl
-│const contentEl
-│const statusEl
-│const avatarContainer
-│const errorSection
-│const errorMessage
-
-backend/templates/components/code_diffs.xml:
-│#id: code-diffs-component
-│#id: diffsContainer
-│#id: sectionTitle
-│#id: diffList
-│#id: diffItem
-│#id: diffHeader
-│#id: diffPath
-│#id: diffActions
-│#id: actionButton
-│#id: approveButton
-│#id: rejectButton
-│#id: buttonText
-│#id: codeBlock
-│#id: codeLine
-│#id: addedLine
-│#id: removedLine
-│#id: emptyState
-│#id: emptyText
-│#id: diffs
-│#id: lines
-
-backend/templates/components/file_changes.xml:
-│#id: file-changes-component
-│#id: changesContainer
-│#id: sectionTitle
-│#id: fileList
-│#id: fileItem
-│#id: fileIcon
-│#id: fileName
-│#id: fileStatus
-│#id: emptyState
-│#id: emptyText
-│#id: files
-
-backend/templates/components/solver_status.xml:
-│#id: solver-status-component
-│#id: statusContainer
-│#id: statusHeader
-│#id: statusTitle
-│#id: statusBadge
-│#id: statusText
-│#id: progressBar
-│#id: progressFill
-
-backend/templates/layouts/base.html:
-│const newTitle
-│const currentPath
-│const activeLink
-│const dot
-
-backend/templates/layouts/chat_content.html:
-│#id: chat-messages
-
-backend/templates/layouts/content.html:
-│#id: content
-
-backend/templates/macros/ui.html:
-│class
-
-backend/templates/pages/company.html:
-│class of
-
-backend/templates/pages/login.html:
-│#id: auth-error
-│#id: auth-error-message
-│#id: loading-spinner
-│#id: login-form
-│#id: email
-│#id: password
-│#id: remember-me
-│const errorDiv
-│const errorMessage
-│const errorDiv
-│const spinner
-│const spinner
-│const errorMessages
-│const message
-│const formData
-│const response
-│const location
-│const data
-
-backend/templates/pages/repomap.html:
-│#id: repo_url
-│#id: submit-button
-│#id: loading
-│#id: repomap-result
-│const submitButton
-│const response
-│const resultDiv
-
-backend/templates/pages/signup.html:
-│#id: email
-│#id: password
-│#id: password-confirm
-│#id: terms
-
-backend/templates/pages/solver.html:
-│#id: issue_url
-│#id: submit-button
-│#id: loading
-│#id: solver-container
-│#id: progress-section
-│#id: progress-bar
-│#id: solver-status
-│#id: files-section
-│#id: files-list
-│#id: files-reasoning
-│#id: solution-section
-│#id: solution-reasoning
-│#id: solution-code
-│#id: error-section
-│#id: error-message
-│const errorSection
-│const errorMessage
-│const data
-│const progress
-│const reasoningDiv
-│const solutionDiv
-│const errorSection
-│const errorMessage
-│const submitButton
-│const form
-│const errorSection
-│const formData
-│const data
+│const 
 
 backend/tests/auth_pages.rs:
 │fn setup_test_db
@@ -789,19 +496,6 @@ backend/tests/ollama.rs:
 │fn test_ollama_with_config
 │fn test_ollama_error_handling
 
-backend/tests/signup_flow.rs:
-│fn create_test_service
-│fn create_test_token
-│fn test_signup_authorization_url
-│fn test_signup_flow
-│fn test_duplicate_signup
-
-backend/tests/solver.rs:
-│fn test_branch_creation
-│fn test_pr_creation
-│fn test_issue_comments
-│fn test_comment_context_generation
-
 backend/tests/tool_selection.rs:
 │fn test_tool_selection
 
@@ -824,8 +518,6 @@ docs/deep-research/syncengine.md:
 
 docs/groq3/oa-syncengine.md:
 
-docs/hierarchy.md:
-
 docs/reasoning.md:
 
 docs/repomap.md:
@@ -835,6 +527,8 @@ docs/repomap_generation.md:
 docs/scramble.md:
 
 docs/timestamp.md:
+
+docs/websocket-architecture.md:
 
 frontend/app/+types/home.ts:
 │const BLOG_POSTS
@@ -846,10 +540,10 @@ frontend/app/+types/video-series.ts:
 │const VIDEOS
 
 frontend/app/components/chat/chat-input.tsx:
-│const
-│const
-│const
-│const
+│const 
+│const 
+│const 
+│const 
 │const textareaRef
 │const handleSubmitMessage
 │const repos
@@ -863,9 +557,9 @@ frontend/app/components/chat/chat-input.tsx:
 
 frontend/app/components/chat/repo-selector.tsx:
 │const RepoForm
-│const
-│const
-│const
+│const 
+│const 
+│const 
 │const handleRepoInputChange
 │const handleRepoSubmit
 │const handleRemoveRepo
@@ -875,7 +569,7 @@ frontend/app/components/chat/repo-selector.tsx:
 frontend/app/components/chat/thinking.tsx:
 │const scrollRef
 │const contentRef
-│const
+│const 
 │const shouldScroll
 │const getIcon
 │const getLabel
@@ -884,13 +578,13 @@ frontend/app/components/chat/thinking.tsx:
 frontend/app/components/header-bar.tsx:
 │#id: login-button
 │#id: signup-button
-│const
+│const 
 │const navigateTo
 
 frontend/app/components/library/chat.tsx:
 │const EXAMPLE_CONTENT
-│const
-│const
+│const 
+│const 
 │const messagesEndRef
 │const scrollToBottom
 │const handleSubmit
@@ -904,17 +598,17 @@ frontend/app/components/library/shad.tsx:
 │#id: name
 │#id: bio
 │#id: message
-│const
+│const 
 
 frontend/app/components/login-form.tsx:
 │#id: email
 │#id: password
-│const
-│const
-│const
-│const
-│const
-│const
+│const 
+│const 
+│const 
+│const 
+│const 
+│const 
 │const checkEmail
 │const url
 │const response
@@ -942,17 +636,17 @@ frontend/app/components/ui/button.tsx:
 frontend/app/components/ui/carousel.tsx:
 │const CarouselContext
 │const context
-│const
-│const
-│const
+│const 
+│const 
+│const 
 │const onSelect
 │const scrollPrev
 │const scrollNext
 │const handleKeyDown
-│const
-│const
-│const
-│const
+│const 
+│const 
+│const 
+│const 
 
 frontend/app/components/ui/chart.tsx:
 │const THEMES
@@ -966,9 +660,9 @@ frontend/app/components/ui/chart.tsx:
 │const color
 │const ChartTooltip
 │const ChartTooltipContent
-│const
+│const 
 │const tooltipLabel
-│const
+│const 
 │const key
 │const itemConfig
 │const value
@@ -978,7 +672,7 @@ frontend/app/components/ui/chart.tsx:
 │const indicatorColor
 │const ChartLegend
 │const ChartLegendContent
-│const
+│const 
 │const key
 │const itemConfig
 │const payloadPayload
@@ -990,21 +684,21 @@ frontend/app/components/ui/form.tsx:
 │const useFormField
 │const fieldContext
 │const itemContext
-│const
+│const 
 │const formState
 │const fieldState
-│const
+│const 
 │const FormItemContext
 │const id
-│const
-│const
-│const
-│const
+│const 
+│const 
+│const 
+│const 
 │const body
 
 frontend/app/components/ui/input-otp.tsx:
 │const inputOTPContext
-│const
+│const 
 
 frontend/app/components/ui/navigation-menu.tsx:
 │const navigationMenuTriggerStyle
@@ -1020,8 +714,8 @@ frontend/app/components/ui/sidebar.tsx:
 │const context
 │const SidebarProvider
 │const isMobile
-│const
-│const
+│const 
+│const 
 │const open
 │const setOpen
 │const openState
@@ -1029,25 +723,25 @@ frontend/app/components/ui/sidebar.tsx:
 │const handleKeyDown
 │const state
 │const contextValue
-│const
-│const
-│const
+│const 
+│const 
+│const 
 │const Comp
 │const Comp
 │const sidebarMenuButtonVariants
 │const Comp
-│const
+│const 
 │const button
 │const Comp
 │const width
 │const Comp
 
 frontend/app/components/ui/slider.tsx:
-│const \_values
+│const _values
 
 frontend/app/components/ui/sonner.tsx:
 │const Toaster
-│const
+│const 
 
 frontend/app/components/ui/toggle-group.tsx:
 │const ToggleGroupContext
@@ -1058,73 +752,65 @@ frontend/app/components/ui/toggle.tsx:
 
 frontend/app/hooks/use-mobile.ts:
 │const MOBILE_BREAKPOINT
-│const
+│const 
 │const mql
 │const onChange
 
+frontend/app/lib/agentsync/hooks/WebSocketClient.ts:
+│class WebSocketClient
+│const msg
+│const delay
+│const msgStr
+│const subscriptionKey
+│const msgStr
+│const msg
+│const subscriptionKey
+
 frontend/app/lib/agentsync/hooks/useAgentSync.ts:
 │const INITIAL_STATE
-│const
-│const
+│const 
+│const 
+│const wsRef
 │const streamingStateRef
+│const addMessageRef
+│const initializedRef
+│const handlerRef
+│const connectionIdRef
+│const initializeWebSocket
+│const wsUrl
 │const handleOnline
 │const handleOffline
-│const processStreamChunk
 │const sendMessage
-│const userMessageId
-│const response
-│const errorText
-│const reader
-│const decoder
-│const assistantMessageId
-│const
-│const chunk
-│const lines
-│const line
-│const data
-│const parsed
-│const content
-│const reasoning
-│const chatId
-│const response
-│const errorText
-│const reader
-│const decoder
-│const userMessageId
-│const
-│const chunk
-│const lines
-│const line
-│const data
-│const parsed
-│const content
-│const reasoning
-│const targetId
+│const messageId
 
 frontend/app/root.tsx:
 │const links
 
-frontend/app/routes/\_layout.tsx:
+frontend/app/routes/_layout.tsx:
 │const navItems
 │const location
 
 frontend/app/routes/chat/$id.tsx:
 │const EMPTY_MESSAGES
-│const
-│const
+│const 
+│const 
 │const messageContainerRef
+│const 
+│const setMessagesRef
 │const messagesSelector
 │const messages
-│const
-│const timeout
+│const 
+│const controller
+│const loadMessages
 │const response
 │const data
 │const handleSubmit
+│const result
 
 frontend/app/routes/chat/index.tsx:
 │const navigate
-│const
-│const
+│const 
+│const 
 │const handleSubmit
 │const response
 
@@ -1133,11 +819,11 @@ frontend/app/routes/company.tsx:
 
 frontend/app/routes/components/thinking.tsx:
 │const DEMO_TEXT
-│const
-│const
-│const
-│const
-│const
+│const 
+│const 
+│const 
+│const 
+│const 
 │const allLines
 │const timer
 │const elapsed
@@ -1151,8 +837,8 @@ frontend/app/routes/login.tsx:
 
 frontend/app/routes/repomap.tsx:
 │#id: repo_url
-│const
-│const
+│const 
+│const 
 │const handleSubmit
 │const formData
 │const repoUrl
@@ -1161,11 +847,11 @@ frontend/app/routes/repomap.tsx:
 
 frontend/app/routes/thinking.tsx:
 │const DEMO_TEXT
-│const
-│const
-│const
-│const
-│const
+│const 
+│const 
+│const 
+│const 
+│const 
 │const allLines
 │const timer
 │const elapsed
@@ -1173,7 +859,7 @@ frontend/app/routes/thinking.tsx:
 
 frontend/app/stores/messages.ts:
 │const useMessagesStore
-│const
+│const 
 
 frontend/app/welcome/logo-dark.svg:
 │#id: clip0_202_2131
@@ -1183,3 +869,4 @@ frontend/app/welcome/logo-light.svg:
 
 frontend/app/welcome/welcome.tsx:
 │const resources
+

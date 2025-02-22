@@ -2,9 +2,9 @@ use super::services::{
     deepseek::DeepSeekService,
     github_issue::GitHubService,
     groq::GroqService,
+    model_router::ModelRouter,
     oauth::{github::GitHubOAuth, scramble::ScrambleOAuth, OAuthConfig},
     openrouter::OpenRouterService,
-    solver::SolverService,
 };
 use super::tools::create_tools;
 use super::ws::transport::WebSocketState;
@@ -107,7 +107,7 @@ pub fn configure_app_with_config(pool: PgPool, config: Option<AppConfig>) -> Rou
         };
 
     // Initialize services with proper configuration
-    let openrouter = OpenRouterService::new(
+    let _openrouter = OpenRouterService::new(
         env::var("OPENROUTER_API_KEY").expect("OPENROUTER_API_KEY must be set"),
     );
 
@@ -117,8 +117,6 @@ pub fn configure_app_with_config(pool: PgPool, config: Option<AppConfig>) -> Rou
         ))
         .expect("Failed to create GitHub service"),
     );
-
-    let solver_service = Arc::new(SolverService::new(pool.clone(), openrouter.clone()));
 
     let api_key = env::var("DEEPSEEK_API_KEY").expect("DEEPSEEK_API_KEY must be set");
     let base_url =
@@ -138,13 +136,9 @@ pub fn configure_app_with_config(pool: PgPool, config: Option<AppConfig>) -> Rou
 
     let tools = create_tools();
 
-    let ws_state = Arc::new(WebSocketState::new(
-        tool_model,
-        chat_model,
-        github_service.clone(),
-        solver_service.clone(),
-        tools,
-    ));
+    let model_router = Arc::new(ModelRouter::new(tool_model, chat_model, tools));
+
+    let ws_state = Arc::new(WebSocketState::new(github_service.clone(), model_router));
 
     // Use provided config or default
     let config = config.unwrap_or_default();

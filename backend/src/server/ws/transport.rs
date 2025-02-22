@@ -1,311 +1,354 @@
-use axum::extract::ws::{Message, WebSocket};
-use axum::extract::Request;
-use axum_extra::extract::cookie::CookieJar;
-use futures::{sink::SinkExt, stream::StreamExt};
-use std::collections::HashMap;
-use std::error::Error;
-use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::{debug, error, info, warn};
-use url::form_urlencoded;
-use uuid::Uuid;
+use std::{collections::HashMap, sync::Arc};
 
-use super::handlers::{chat::ChatHandler, solver_json::SolverJsonHandler, MessageHandler};
-use super::types::{ChatMessage, ConnectionState, WebSocketError};
-use crate::server::services::{
-    deepseek::{DeepSeekService, Tool},
-    github_issue::GitHubService,
-    model_router::ModelRouter,
-    solver::SolverService,
+use axum::extract::ws::{Message, WebSocket};
+use futures_util::{SinkExt, StreamExt};
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tracing::{debug, error, info};
+
+use crate::server::{
+    config::AppState,
+    services::{github_issue::GitHubService, model_router::ModelRouter},
+    ws::handlers::chat::{ChatDelta, ChatMessage, ChatResponse},
 };
 
+pub type WebSocketSender = mpsc::Sender<String>;
+
+#[derive(Clone)]
 pub struct WebSocketState {
-    connections: Arc<RwLock<HashMap<String, ConnectionState>>>,
+    pub connections: Arc<RwLock<HashMap<String, WebSocketSender>>>,
+    pub github_service: Arc<GitHubService>,
     pub model_router: Arc<ModelRouter>,
-    github_service: Arc<GitHubService>,
-    solver_service: Arc<SolverService>,
 }
 
 impl WebSocketState {
-    pub fn new(
-        tool_model: Arc<DeepSeekService>,
-        chat_model: Arc<DeepSeekService>,
-        github_service: Arc<GitHubService>,
-        solver_service: Arc<SolverService>,
-        tools: Vec<Tool>,
-    ) -> Self {
-        let model_router = Arc::new(ModelRouter::new(tool_model, chat_model, tools));
+    pub fn new(github_service: Arc<GitHubService>, model_router: Arc<ModelRouter>) -> Self {
+        info!("Creating new WebSocketState");
         Self {
             connections: Arc::new(RwLock::new(HashMap::new())),
-            model_router,
             github_service,
-            solver_service,
+            model_router,
         }
-    }
-
-    pub fn create_handlers(&self) -> (Arc<ChatHandler>, Arc<SolverJsonHandler>) {
-        (
-            Arc::new(ChatHandler::new(
-                Arc::new(self.clone()),
-                self.github_service.clone(),
-            )),
-            Arc::new(SolverJsonHandler::new(
-                Arc::new(self.clone()),
-                Arc::new(Mutex::new((*self.solver_service).clone())),
-            )),
-        )
-    }
-
-    pub async fn validate_session(
-        &self,
-        jar: &CookieJar,
-        request: Request<axum::body::Body>,
-    ) -> Result<i32, WebSocketError> {
-        // First try to get session from cookie
-        if let Some(session_cookie) = jar.get("session") {
-            let session_id = session_cookie.value();
-            // Try parsing as numeric session ID
-            if let Ok(session_id) = session_id.parse::<i32>() {
-                debug!("Found numeric session cookie with id: {}", session_id);
-                return Ok(session_id);
-            }
-            // Try parsing as GitHub session ID
-            if session_id.starts_with("github_") {
-                if let Ok(github_id) = session_id.trim_start_matches("github_").parse::<i32>() {
-                    debug!("Found GitHub session cookie with id: {}", github_id);
-                    return Ok(github_id);
-                }
-            }
-        }
-
-        // If no cookie found, try to get session from query params
-        let uri = request.uri();
-        if let Some(query_params) = uri.query() {
-            let params: HashMap<String, String> = form_urlencoded::parse(query_params.as_bytes())
-                .into_owned()
-                .collect();
-
-            if let Some(session_token) = params.get("session") {
-                // Try parsing as numeric session ID
-                if let Ok(session_id) = session_token.parse::<i32>() {
-                    debug!(
-                        "Found numeric session token in query params with id: {}",
-                        session_id
-                    );
-                    return Ok(session_id);
-                }
-                // Try parsing as GitHub session ID
-                if session_token.starts_with("github_") {
-                    if let Ok(github_id) =
-                        session_token.trim_start_matches("github_").parse::<i32>()
-                    {
-                        debug!(
-                            "Found GitHub session token in query params with id: {}",
-                            github_id
-                        );
-                        return Ok(github_id);
-                    }
-                }
-            }
-        }
-
-        warn!("No valid session token found in cookie or query params");
-        Err(WebSocketError::NoSession)
-    }
-
-    pub async fn handle_socket(
-        self: Arc<Self>,
-        socket: WebSocket,
-        chat_handler: Arc<ChatHandler>,
-        user_id: i32,
-    ) {
-        let (mut sender, mut receiver) = socket.split();
-        let (tx, mut rx) = mpsc::unbounded_channel();
-
-        // Generate unique connection ID
-        let conn_id = Uuid::new_v4().to_string();
-        info!("New WebSocket connection established: {}", conn_id);
-
-        // Store connection with user ID
-        self.add_connection(&conn_id, user_id, tx.clone()).await;
-        info!("Connection stored for user {}: {}", user_id, conn_id);
-
-        // Handle outgoing messages
-        let ws_state = self.clone();
-        let send_conn_id = conn_id.clone();
-        let send_task = tokio::spawn(async move {
-            while let Some(message) = rx.recv().await {
-                info!("Sending message to client {}: {:?}", send_conn_id, message);
-                if sender.send(message).await.is_err() {
-                    error!("Failed to send message to client {}", send_conn_id);
-                    break;
-                }
-            }
-            // Connection closed, remove from state
-            ws_state.remove_connection(&send_conn_id).await;
-            info!("Connection removed: {}", send_conn_id);
-        });
-
-        // Handle incoming messages
-        let receive_conn_id = conn_id.clone();
-        let receive_task = tokio::spawn(async move {
-            while let Some(Ok(message)) = receiver.next().await {
-                if let Message::Text(text) = message {
-                    info!("Raw WebSocket message received: {}", text);
-
-                    // Parse the message
-                    if let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) {
-                        info!("Parsed message: {:?}", data);
-
-                        // Try to extract content directly if message type is missing
-                        if let Some(content) = data.get("content") {
-                            info!("Found direct content: {:?}", content);
-                            if let Some(content_str) = content.as_str() {
-                                // Create a chat message manually
-                                let chat_msg = ChatMessage::UserMessage {
-                                    content: content_str.to_string(),
-                                };
-                                info!("Created chat message: {:?}", chat_msg);
-                                if let Err(e) = chat_handler
-                                    .handle_message(chat_msg, receive_conn_id.clone())
-                                    .await
-                                {
-                                    error!("Error handling chat message: {}", e);
-                                }
-                            }
-                        } else if let Some(message_type) = data.get("type") {
-                            match message_type.as_str() {
-                                Some("chat") => {
-                                    info!("Processing chat message");
-                                    if let Some(message) = data.get("message") {
-                                        if let Ok(chat_msg) =
-                                            serde_json::from_value(message.clone())
-                                        {
-                                            info!("Parsed chat message: {:?}", chat_msg);
-                                            if let Err(e) = chat_handler
-                                                .handle_message(chat_msg, receive_conn_id.clone())
-                                                .await
-                                            {
-                                                error!("Error handling chat message: {}", e);
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => {
-                                    error!("Unknown message type");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        // Wait for either task to finish
-        let final_conn_id = conn_id.clone();
-        tokio::select! {
-            _ = send_task => {
-                info!("Send task completed for {}", final_conn_id);
-            },
-            _ = receive_task => {
-                info!("Receive task completed for {}", final_conn_id);
-            },
-        }
-    }
-
-    pub async fn broadcast(&self, msg: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
-        info!("Broadcasting message: {}", msg);
-        let conns = self.connections.read().await;
-        for conn in conns.values() {
-            conn.tx.send(Message::Text(msg.to_string()))?;
-        }
-        Ok(())
     }
 
     pub async fn send_to(
         &self,
         conn_id: &str,
         msg: &str,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        info!("Sending message to {}: {}", conn_id, msg);
-        if let Some(conn) = self.connections.read().await.get(conn_id) {
-            conn.tx.send(Message::Text(msg.to_string()))?;
-            info!("Message sent successfully");
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        debug!("Sending message to connection {}: {}", conn_id, msg);
+        if let Some(tx) = self.connections.read().await.get(conn_id) {
+            tx.send(msg.to_string()).await?;
+            debug!("Message sent successfully");
         } else {
-            error!("Connection {} not found", conn_id);
+            debug!("Connection {} not found", conn_id);
         }
         Ok(())
     }
 
-    pub async fn get_user_id(&self, conn_id: &str) -> Option<i32> {
-        self.connections
-            .read()
-            .await
-            .get(conn_id)
-            .map(|conn| conn.user_id)
+    pub async fn broadcast(
+        &self,
+        msg: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        debug!("Broadcasting message to all connections: {}", msg);
+        let connections = self.connections.read().await;
+        for (id, tx) in connections.iter() {
+            debug!("Sending to connection {}", id);
+            if let Err(e) = tx.send(msg.to_string()).await {
+                error!("Failed to send to connection {}: {:?}", id, e);
+            }
+        }
+        Ok(())
     }
 
     pub async fn add_connection(
         &self,
-        conn_id: &str,
-        user_id: i32,
-        tx: mpsc::UnboundedSender<Message>,
-    ) {
-        let mut conns = self.connections.write().await;
-        conns.insert(
-            conn_id.to_string(),
-            ConnectionState {
-                user_id,
-                tx: tx.clone(),
-            },
-        );
+        conn_id: String,
+        tx: WebSocketSender,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Adding new connection: {}", conn_id);
+        self.connections.write().await.insert(conn_id.clone(), tx);
+        let count = self.connections.read().await.len();
+        info!("Total active connections: {}", count);
+        Ok(())
     }
 
-    pub async fn remove_connection(&self, conn_id: &str) {
-        let mut conns = self.connections.write().await;
-        conns.remove(conn_id);
-    }
-
-    // Test helper method
-    pub async fn add_test_connection(
-        self: &Arc<Self>,
-        conn_id: &str,
-        user_id: i32,
-    ) -> mpsc::UnboundedReceiver<Message> {
-        let (tx, rx) = mpsc::unbounded_channel();
-        let mut conns = self.connections.write().await;
-        conns.insert(
-            conn_id.to_string(),
-            ConnectionState {
-                user_id,
-                tx: tx.clone(),
-            },
-        );
-        rx
-    }
-
-    pub async fn get_tx(
+    pub async fn remove_connection(
         &self,
         conn_id: &str,
-    ) -> Result<mpsc::UnboundedSender<Message>, Box<dyn Error + Send + Sync>> {
-        if let Some(conn) = self.connections.read().await.get(conn_id) {
-            Ok(conn.tx.clone())
-        } else {
-            Err(Box::new(WebSocketError::ConnectionError(format!(
-                "Connection {} not found",
-                conn_id
-            ))))
-        }
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Removing connection: {}", conn_id);
+        self.connections.write().await.remove(conn_id);
+        let count = self.connections.read().await.len();
+        info!("Total active connections: {}", count);
+        Ok(())
     }
 }
 
-impl Clone for WebSocketState {
-    fn clone(&self) -> Self {
+pub struct MessageProcessor {
+    app_state: AppState,
+    user_id: String,
+    conn_id: String,
+}
+
+impl MessageProcessor {
+    pub fn new(app_state: AppState, user_id: String, conn_id: String) -> Self {
         Self {
-            connections: self.connections.clone(),
-            model_router: self.model_router.clone(),
-            github_service: self.github_service.clone(),
-            solver_service: self.solver_service.clone(),
+            app_state,
+            user_id,
+            conn_id,
         }
+    }
+
+    pub async fn process_message(
+        &mut self,
+        text: &str,
+        tx: &Arc<mpsc::Sender<String>>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let chat_msg: ChatMessage = match serde_json::from_str(text) {
+            Ok(msg) => msg,
+            Err(e) => {
+                error!("Failed to parse message: {:?}", e);
+                let error_msg = serde_json::to_string(&ChatResponse::Error {
+                    message: format!("Invalid message format: {}", e),
+                    connection_id: Some(self.conn_id.clone()),
+                })?;
+                tx.send(error_msg).await?;
+                return Ok(());
+            }
+        };
+
+        match chat_msg {
+            ChatMessage::Subscribe {
+                scope,
+                connection_id,
+                conversation_id,
+                ..
+            } => {
+                // Update our connection ID to match the client's if provided
+                if let Some(client_conn_id) = connection_id {
+                    debug!(
+                        "Updating connection ID from {} to {}",
+                        self.conn_id, client_conn_id
+                    );
+                    self.conn_id = client_conn_id;
+                }
+
+                info!(
+                    "Processing subscribe message for scope: {} (conversation: {:?})",
+                    scope, conversation_id
+                );
+                let response = serde_json::to_string(&ChatResponse::Subscribed {
+                    scope,
+                    connection_id: Some(self.conn_id.clone()),
+                    last_sync_id: 0,
+                })?;
+                tx.send(response).await?;
+            }
+            ChatMessage::Message {
+                id,
+                conversation_id,
+                content,
+                repos,
+                use_reasoning,
+                ..
+            } => {
+                info!(
+                    "Processing chat message: id={}, conv={:?}, content={}",
+                    id, conversation_id, content
+                );
+
+                // Create conversation ID if not provided
+                let conversation_id = conversation_id.unwrap_or_else(uuid::Uuid::new_v4);
+
+                // Send the message to the model router
+                let response = match self
+                    .app_state
+                    .ws_state
+                    .model_router
+                    .chat(content, use_reasoning.unwrap_or(false))
+                    .await
+                {
+                    Ok(response) => response,
+                    Err(e) => {
+                        error!("Failed to process message: {:?}", e);
+                        let error_msg = serde_json::to_string(&ChatResponse::Error {
+                            message: format!("Failed to process message: {}", e),
+                            connection_id: Some(self.conn_id.clone()),
+                        })?;
+                        tx.send(error_msg).await?;
+                        return Ok(());
+                    }
+                };
+
+                // Send the response
+                let (content, reasoning) = response;
+                let response = serde_json::to_string(&ChatResponse::Update {
+                    message_id: id,
+                    connection_id: Some(self.conn_id.clone()),
+                    delta: ChatDelta {
+                        content: Some(content),
+                        reasoning,
+                    },
+                })?;
+
+                match tx.send(response).await {
+                    Ok(_) => {
+                        let complete_response = serde_json::to_string(&ChatResponse::Complete {
+                            message_id: id,
+                            connection_id: Some(self.conn_id.clone()),
+                            conversation_id,
+                        })?;
+                        tx.send(complete_response).await?;
+                    }
+                    Err(e) => {
+                        error!("Failed to send response: {:?}", e);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+pub struct WebSocketTransport {
+    pub state: Arc<WebSocketState>,
+    pub app_state: AppState,
+}
+
+impl WebSocketTransport {
+    pub fn new(state: Arc<WebSocketState>, app_state: AppState) -> Self {
+        info!("Creating new WebSocketTransport");
+        Self { state, app_state }
+    }
+
+    pub async fn handle_socket(
+        &self,
+        socket: WebSocket,
+        user_id: String,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Handling new WebSocket connection for user: {}", user_id);
+
+        let (sender, mut receiver) = socket.split();
+        let (tx, mut rx) = mpsc::channel::<String>(32);
+
+        let conn_id = uuid::Uuid::new_v4().to_string();
+        info!("Created connection ID: {}", conn_id);
+
+        if let Err(e) = self.state.add_connection(conn_id.clone(), tx.clone()).await {
+            error!("Failed to add connection: {:?}", e);
+            let error_msg = serde_json::to_string(&ChatResponse::Error {
+                message: "Failed to initialize connection".to_string(),
+                connection_id: Some(conn_id.clone()),
+            })?;
+            tx.send(error_msg).await?;
+            return Err(e);
+        }
+
+        // Clone AppState before moving into async task
+        let app_state = self.app_state.clone();
+        let receive_conn_id = conn_id.clone();
+        let send_conn_id = conn_id.clone();
+        let cleanup_state = self.state.clone();
+
+        let is_closing = Arc::new(Mutex::new(false));
+        let is_closing_send = is_closing.clone();
+        let is_closing_receive = is_closing.clone();
+
+        let (pending_tx, mut pending_rx) = mpsc::channel::<String>(32);
+        let pending_tx = Arc::new(pending_tx);
+        let pending_tx_receive = pending_tx.clone();
+
+        let cleanup = {
+            let cleanup_conn_id = conn_id;
+            let cleanup_state = cleanup_state;
+            move || async move {
+                info!("Running cleanup for connection: {}", cleanup_conn_id);
+                if let Err(e) = cleanup_state.remove_connection(&cleanup_conn_id).await {
+                    error!("Failed to clean up connection: {:?}", e);
+                }
+                info!("Cleanup completed for connection: {}", cleanup_conn_id);
+            }
+        };
+
+        let receive_handle = tokio::spawn(async move {
+            info!("Starting receive task for connection: {}", receive_conn_id);
+            let mut processor =
+                MessageProcessor::new(app_state, user_id.clone(), receive_conn_id.clone());
+            while let Some(Ok(msg)) = receiver.next().await {
+                match msg {
+                    Message::Text(ref text) => {
+                        info!("Received message on {}: {}", receive_conn_id, text);
+                        if let Err(e) = processor.process_message(text, &pending_tx_receive).await {
+                            error!("Error processing message on {}: {:?}", receive_conn_id, e);
+                            let error_msg = serde_json::to_string(&ChatResponse::Error {
+                                message: format!("Message processing error: {}", e),
+                                connection_id: Some(receive_conn_id.clone()),
+                            })
+                            .unwrap();
+                            if let Err(e) = pending_tx_receive.send(error_msg).await {
+                                error!("Failed to send error message: {:?}", e);
+                            }
+                            break;
+                        }
+                    }
+                    Message::Close(_) => {
+                        info!("Client requested close on {}", receive_conn_id);
+                        let mut is_closing = is_closing_receive.lock().await;
+                        *is_closing = true;
+                        break;
+                    }
+                    _ => {
+                        debug!("Ignoring non-text message on {}", receive_conn_id);
+                    }
+                }
+            }
+            info!("Receive task ending for {}", receive_conn_id);
+        });
+
+        let send_handle = tokio::spawn(async move {
+            info!("Starting send task for connection: {}", send_conn_id);
+            let mut sender = sender;
+
+            loop {
+                tokio::select! {
+                    Some(msg) = rx.recv() => {
+                        debug!("Sending message on {}: {}", send_conn_id, msg);
+                        if let Err(e) = pending_tx.send(msg).await {
+                            error!("Failed to queue message: {:?}", e);
+                            break;
+                        }
+                    }
+                    Some(msg) = pending_rx.recv() => {
+                        debug!("Processing pending message on {}: {}", send_conn_id, msg);
+                        if let Err(e) = sender.send(Message::Text(msg)).await {
+                            error!("Error sending message on {}: {:?}", send_conn_id, e);
+                            break;
+                        }
+                    }
+                    else => {
+                        let is_closing = is_closing_send.lock().await;
+                        if *is_closing && rx.is_empty() && pending_rx.is_empty() {
+                            info!("All messages sent, closing connection {}", send_conn_id);
+                            break;
+                        }
+                    }
+                }
+            }
+            info!("Send task ending for {}", send_conn_id);
+        });
+
+        let (receive_result, send_result) = tokio::join!(receive_handle, send_handle);
+
+        if let Err(e) = receive_result {
+            error!("Receive task error: {:?}", e);
+        }
+        if let Err(e) = send_result {
+            error!("Send task error: {:?}", e);
+        }
+
+        cleanup().await;
+
+        Ok(())
     }
 }

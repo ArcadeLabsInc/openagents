@@ -3,6 +3,7 @@ use axum::{
     http::StatusCode,
 };
 use axum_extra::extract::cookie::CookieJar;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{error, info};
@@ -13,6 +14,7 @@ use crate::server::{
     handlers::oauth::session::SESSION_COOKIE_NAME,
     models::chat::{CreateConversationRequest, CreateMessageRequest, Message},
     services::chat_database::ChatDatabaseService,
+    ws::handlers::chat::{ChatDelta, ChatResponse},
 };
 
 #[derive(Debug, Deserialize)]
@@ -113,27 +115,86 @@ pub async fn start_repo_chat(
         "content": request.message
     })];
 
-    // Get Groq response with reasoning if requested
-    let (ai_response, reasoning) = state
+    // Start Groq stream
+    let mut stream = state
         .groq
-        .chat_with_history(messages, request.use_reasoning.unwrap_or(false))
+        .chat_with_history_stream(messages, request.use_reasoning.unwrap_or(false))
         .await
         .map_err(|e| {
-            error!("Failed to get Groq response: {:?}", e);
+            error!("Failed to get Groq stream: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to get AI response: {}", e),
             )
         })?;
 
-    // Save AI response with reasoning
+    // Process stream and accumulate content
+    let mut content = String::new();
+    let mut reasoning = String::new();
+
+    // Broadcast updates through WebSocket
+    while let Some(update) = stream.next().await {
+        match update {
+            Ok(delta_str) => {
+                let delta: ChatDelta = serde_json::from_str(&delta_str).map_err(|e| {
+                    error!("Failed to parse delta: {:?}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to parse AI response: {}", e),
+                    )
+                })?;
+
+                // Send update through WebSocket
+                let update_response = ChatResponse::Update {
+                    message_id: _message.id,
+                    connection_id: None,
+                    delta: delta.clone(),
+                };
+                let msg = serde_json::to_string(&update_response).map_err(|e| {
+                    error!("Failed to serialize update: {:?}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to serialize update: {}", e),
+                    )
+                })?;
+                state.ws_state.broadcast(&msg).await.map_err(|e| {
+                    error!("Failed to broadcast update: {:?}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to broadcast update: {}", e),
+                    )
+                })?;
+
+                // Accumulate content
+                if let Some(c) = delta.content {
+                    content.push_str(&c);
+                }
+                if let Some(r) = delta.reasoning {
+                    reasoning.push_str(&r);
+                }
+            }
+            Err(e) => {
+                error!("Stream error: {:?}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Stream error: {}", e),
+                ));
+            }
+        }
+    }
+
+    // Save final AI response with reasoning
     let ai_message = chat_db
         .create_message(&CreateMessageRequest {
             conversation_id: conversation.id,
             user_id: user_id.clone(),
             role: "assistant".to_string(),
-            content: ai_response,
-            reasoning: reasoning.map(|r| json!(r)),
+            content,
+            reasoning: if reasoning.is_empty() {
+                None
+            } else {
+                Some(json!(reasoning))
+            },
             metadata: Some(json!({
                 "repos": request.repos
             })),
@@ -149,6 +210,27 @@ pub async fn start_repo_chat(
         })?;
 
     info!("Created AI message with id: {}", ai_message.id);
+
+    // Send completion through WebSocket
+    let complete_response = ChatResponse::Complete {
+        message_id: _message.id,
+        connection_id: None,
+        conversation_id: conversation.id,
+    };
+    let msg = serde_json::to_string(&complete_response).map_err(|e| {
+        error!("Failed to serialize completion: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to serialize completion: {}", e),
+        )
+    })?;
+    state.ws_state.broadcast(&msg).await.map_err(|e| {
+        error!("Failed to broadcast completion: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to broadcast completion: {}", e),
+        )
+    })?;
 
     Ok(Json(StartChatResponse {
         id: conversation.id.to_string(),
@@ -252,27 +334,86 @@ pub async fn send_message(
         "content": request.message
     }));
 
-    // Get AI response with full history and reasoning if requested
-    let (ai_response, reasoning) = state
+    // Start Groq stream
+    let mut stream = state
         .groq
-        .chat_with_history(chat_messages, request.use_reasoning.unwrap_or(false))
+        .chat_with_history_stream(chat_messages, request.use_reasoning.unwrap_or(false))
         .await
         .map_err(|e| {
-            error!("Failed to get Groq response: {:?}", e);
+            error!("Failed to get Groq stream: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to get AI response: {}", e),
             )
         })?;
 
-    // Save AI response with reasoning
+    // Process stream and accumulate content
+    let mut content = String::new();
+    let mut reasoning = String::new();
+
+    // Broadcast updates through WebSocket
+    while let Some(update) = stream.next().await {
+        match update {
+            Ok(delta_str) => {
+                let delta: ChatDelta = serde_json::from_str(&delta_str).map_err(|e| {
+                    error!("Failed to parse delta: {:?}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to parse AI response: {}", e),
+                    )
+                })?;
+
+                // Send update through WebSocket
+                let update_response = ChatResponse::Update {
+                    message_id: _message.id,
+                    connection_id: None,
+                    delta: delta.clone(),
+                };
+                let msg = serde_json::to_string(&update_response).map_err(|e| {
+                    error!("Failed to serialize update: {:?}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to serialize update: {}", e),
+                    )
+                })?;
+                state.ws_state.broadcast(&msg).await.map_err(|e| {
+                    error!("Failed to broadcast update: {:?}", e);
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to broadcast update: {}", e),
+                    )
+                })?;
+
+                // Accumulate content
+                if let Some(c) = delta.content {
+                    content.push_str(&c);
+                }
+                if let Some(r) = delta.reasoning {
+                    reasoning.push_str(&r);
+                }
+            }
+            Err(e) => {
+                error!("Stream error: {:?}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Stream error: {}", e),
+                ));
+            }
+        }
+    }
+
+    // Save final AI response with reasoning
     let ai_message = chat_db
         .create_message(&CreateMessageRequest {
             conversation_id: request.conversation_id,
             user_id,
             role: "assistant".to_string(),
-            content: ai_response.clone(),
-            reasoning: reasoning.map(|r| json!(r)),
+            content: content.clone(),
+            reasoning: if reasoning.is_empty() {
+                None
+            } else {
+                Some(json!(reasoning))
+            },
             metadata: request.repos.clone().map(|repos| json!({ "repos": repos })),
             tool_calls: None,
         })
@@ -285,9 +426,30 @@ pub async fn send_message(
             )
         })?;
 
+    // Send completion through WebSocket
+    let complete_response = ChatResponse::Complete {
+        message_id: ai_message.id,
+        connection_id: None,
+        conversation_id: request.conversation_id,
+    };
+    let msg = serde_json::to_string(&complete_response).map_err(|e| {
+        error!("Failed to serialize completion: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to serialize completion: {}", e),
+        )
+    })?;
+    state.ws_state.broadcast(&msg).await.map_err(|e| {
+        error!("Failed to broadcast completion: {:?}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to broadcast completion: {}", e),
+        )
+    })?;
+
     Ok(Json(SendMessageResponse {
         id: ai_message.id.to_string(),
-        message: ai_response,
+        message: content,
     }))
 }
 
